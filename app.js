@@ -16,7 +16,7 @@ const loginForm = document.getElementById('login-form');
 const authError = document.getElementById('auth-error');
 const logoutBtn = document.getElementById('logout-btn');
 
-const addTargetBtn = document.getElementById('addTarget-btn');
+const addTargetBtn = document.getElementById('add-target-btn');
 const modal = document.getElementById('add-target-modal');
 const closeModalBtn = document.querySelector('.close-btn');
 const addTargetForm = document.getElementById('add-target-form');
