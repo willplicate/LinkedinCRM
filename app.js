@@ -33,20 +33,22 @@ document.addEventListener('DOMContentLoaded', () => {
     //  CORE APP LOGIC
     // ============================================================================
     
-   // --- FETCH AND DISPLAY TASKS (IMPROVED DATE LOGIC) ---
+    // --- FETCH AND DISPLAY TASKS (DEBUGGING VERSION) ---
     const fetchAndDisplayTasks = async () => {
         const { data: targets, error } = await supabaseClient
             .from('targets')
             .select('*')
             .in('status', ['Active', 'Awaiting Reply']);
 
+        // --- CHECKPOINT 1: See what data we get from the database ---
+        console.log('--- CHECKPOINT 1: Raw data from Supabase ---');
+        console.table(targets); // .table() is great for viewing arrays of objects
+
         if (error) {
             console.error('Error fetching targets:', error);
             return;
         }
 
-        // --- Date Logic Helpers ---
-        // **FIX:** This creates a more reliable "today" timestamp for comparisons
         const today = new Date();
         today.setHours(0, 0, 0, 0); 
 
@@ -57,13 +59,16 @@ document.addEventListener('DOMContentLoaded', () => {
             return date.toDateString() === lastDay.toDateString();
         };
 
-        // --- Filter for Today's Tasks ---
+        console.log(`--- CHECKPOINT 2: Filtering for today (${today.toDateString()}) ---`);
         const todaysTasks = targets.filter(target => {
-            // For a new target, last_completed_at is null, so it should always appear if due.
+            // Log each target being processed
+            console.log(`- Checking "${target.name}" | Frequency: "${target.frequency}"`);
+
             if (!target.last_completed_at) {
-                if (target.frequency === 'Daily') return true;
-                if (target.frequency === 'Weekly' && today.getDay() === 5) return true; // 5 = Friday
-                if (target.frequency === 'Monthly' && isLastFridayOfMonth(today)) return true;
+                if (target.frequency === 'Daily') { console.log('  ✔️ Is a new Daily task. Should be included.'); return true; }
+                if (target.frequency === 'Weekly' && today.getDay() === 5) { console.log('  ✔️ Is a new Weekly task on a Friday. Should be included.'); return true; }
+                if (target.frequency === 'Monthly' && isLastFridayOfMonth(today)) { console.log('  ✔️ Is a new Monthly task on the last Friday. Should be included.'); return true; }
+                console.log('  ❌ Is a new task, but not due today.');
                 return false;
             }
 
@@ -71,193 +76,42 @@ document.addEventListener('DOMContentLoaded', () => {
             lastCompleted.setHours(0, 0, 0, 0);
 
             if (lastCompleted.getTime() >= today.getTime()) {
-                return false; // Already completed today or in the future
+                console.log('  ❌ Already completed today or in the future.');
+                return false; 
             }
 
-            // If completed in the past, check if it's due again today
             switch (target.frequency) {
-                case 'Daily':
-                    return true;
+                case 'Daily': console.log('  ✔️ Is a past Daily task. Should be included.'); return true;
                 case 'Weekly':
-                    return today.getDay() === 5; // 5 = Friday
+                    const isDue = today.getDay() === 5;
+                    console.log(isDue ? '  ✔️ Is a past Weekly task on a Friday. Should be included.' : '  ❌ Is a past Weekly task, but not a Friday.');
+                    return isDue;
                 case 'Monthly':
-                    return isLastFridayOfMonth(today);
+                    const isDueMonthly = isLastFridayOfMonth(today);
+                    console.log(isDueMonthly ? '  ✔️ Is a past Monthly task on the last Friday. Should be included.' : '  ❌ Is a past Monthly task, but not the last Friday.');
+                    return isDueMonthly;
                 default:
                     return false;
             }
         });
         
-        // --- Sort Tasks: Monthly > Weekly > Daily ---
+        // --- CHECKPOINT 3: See what tasks are left after filtering ---
+        console.log('--- CHECKPOINT 3: Tasks remaining after filtering ---');
+        console.table(todaysTasks);
+
         const frequencyOrder = { 'Monthly': 1, 'Weekly': 2, 'Daily': 3 };
         todaysTasks.sort((a, b) => frequencyOrder[a.frequency] - frequencyOrder[b.frequency]);
 
-        // --- Render Tasks to the Page ---
         linkedinTasksList.innerHTML = '';
         mediaTasksList.innerHTML = '';
 
         if (todaysTasks.length === 0) {
+            console.log('--- CHECKPOINT 4: No tasks to display. ---');
             linkedinTasksList.innerHTML = '<p>No tasks due today. Great job!</p>';
-            return; // Exit after showing the message
+            return;
         }
 
-        todaysTasks.forEach(target => {
-            const taskHTML = `
-                <div class="task-item ${target.frequency.toLowerCase()}">
-                    <div class="task-header">
-                        <a href="${target.linkedin_url}" target="_blank">${target.name}</a>
-                        ${target.publication ? `<span class="publication">(${target.publication})</span>` : ''}
-                    </div>
-                    <form class="interaction-form" data-target-id="${target.id}">
-                        <div class="actions">
-                            <label><input type="checkbox" name="checked"> Checked</label>
-                            <label><input type="checkbox" name="commented"> Commented</label>
-                            <label><input type="checkbox" name="contacted"> Contacted</label>
-                            ${target.status === 'Awaiting Reply' ? `<label><input type="checkbox" name="replied"> ↩️ Replied</label>` : ''}
-                        </div>
-                        <textarea name="notes" placeholder="Add a note..."></textarea>
-                        <button type="submit">Save Interaction</button>
-                    </form>
-                </div>
-            `;
-            if (target.target_type === 'Media') {
-                mediaTasksList.innerHTML += taskHTML;
-            } else {
-                linkedinTasksList.innerHTML += taskHTML;
-            }
-        });
-
-        // Add event listeners to the new forms
-        document.querySelectorAll('.interaction-form').forEach(form => {
-            form.addEventListener('submit', handleInteractionSubmit);
-        });
-    };
-
-        // --- Date Logic Helpers ---
-        // **FIX:** This creates a more reliable "today" timestamp for comparisons
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); 
-
-        const isLastFridayOfMonth = (date) => {
-            const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-            const lastDay = new Date(nextMonth - 1);
-            lastDay.setDate(lastDay.getDate() - (lastDay.getDay() + 2) % 7);
-            return date.toDateString() === lastDay.toDateString();
-        };
-
-        // --- Filter for Today's Tasks ---
-        const todaysTasks = targets.filter(target => {
-            // For a new target, last_completed_at is null, so it should always appear if due.
-            if (!target.last_completed_at) {
-                if (target.frequency === 'Daily') return true;
-                if (target.frequency === 'Weekly' && today.getDay() === 5) return true; // 5 = Friday
-                if (target.frequency === 'Monthly' && isLastFridayOfMonth(today)) return true;
-                return false;
-            }
-
-            const lastCompleted = new Date(target.last_completed_at);
-            lastCompleted.setHours(0, 0, 0, 0);
-
-            if (lastCompleted.getTime() >= today.getTime()) {
-                return false; // Already completed today or in the future
-            }
-
-            // If completed in the past, check if it's due again today
-            switch (target.frequency) {
-                case 'Daily':
-                    return true;
-                case 'Weekly':
-                    return today.getDay() === 5; // 5 = Friday
-                case 'Monthly':
-                    return isLastFridayOfMonth(today);
-                default:
-                    return false;
-            }
-        });
-        
-        // --- Sort Tasks: Monthly > Weekly > Daily ---
-        const frequencyOrder = { 'Monthly': 1, 'Weekly': 2, 'Daily': 3 };
-        todaysTasks.sort((a, b) => frequencyOrder[a.frequency] - frequencyOrder[b.frequency]);
-
-        // --- Render Tasks to the Page ---
-        linkedinTasksList.innerHTML = '';
-        mediaTasksList.innerHTML = '';
-
-        if (todaysTasks.length === 0) {
-            linkedinTasksList.innerHTML = '<p>No tasks due today. Great job!</p>';
-            return; // Exit after showing the message
-        }
-
-        todaysTasks.forEach(target => {
-            const taskHTML = `
-                <div class="task-item ${target.frequency.toLowerCase()}">
-                    <div class="task-header">
-                        <a href="${target.linkedin_url}" target="_blank">${target.name}</a>
-                        ${target.publication ? `<span class="publication">(${target.publication})</span>` : ''}
-                    </div>
-                    <form class="interaction-form" data-target-id="${target.id}">
-                        <div class="actions">
-                            <label><input type="checkbox" name="checked"> Checked</label>
-                            <label><input type="checkbox" name="commented"> Commented</label>
-                            <label><input type="checkbox" name="contacted"> Contacted</label>
-                            ${target.status === 'Awaiting Reply' ? `<label><input type="checkbox" name="replied"> ↩️ Replied</label>` : ''}
-                        </div>
-                        <textarea name="notes" placeholder="Add a note..."></textarea>
-                        <button type="submit">Save Interaction</button>
-                    </form>
-                </div>
-            `;
-            if (target.target_type === 'Media') {
-                mediaTasksList.innerHTML += taskHTML;
-            } else {
-                linkedinTasksList.innerHTML += taskHTML;
-            }
-        });
-
-        // Add event listeners to the new forms
-        document.querySelectorAll('.interaction-form').forEach(form => {
-            form.addEventListener('submit', handleInteractionSubmit);
-        });
-    };
-        // --- Date Logic Helpers ---
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Normalize to start of day
-
-        const isLastFridayOfMonth = (date) => {
-            const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-            const lastDay = new Date(nextMonth - 1);
-            lastDay.setDate(lastDay.getDate() - (lastDay.getDay() + 2) % 7);
-            return date.toDateString() === lastDay.toDateString();
-        };
-
-        // --- Filter for Today's Tasks ---
-        const todaysTasks = targets.filter(target => {
-            const lastCompleted = target.last_completed_at ? new Date(target.last_completed_at) : null;
-            if (lastCompleted) lastCompleted.setHours(0, 0, 0, 0);
-
-            switch (target.frequency) {
-                case 'Daily':
-                    return !lastCompleted || lastCompleted.getTime() < today.getTime();
-                case 'Weekly':
-                    return today.getDay() === 5 && (!lastCompleted || lastCompleted.getTime() < today.getTime()); // 5 = Friday
-                case 'Monthly':
-                    return isLastFridayOfMonth(today) && (!lastCompleted || lastCompleted.getTime() < today.getTime());
-                default:
-                    return false;
-            }
-        });
-        
-        // --- Sort Tasks: Monthly > Weekly > Daily ---
-        const frequencyOrder = { 'Monthly': 1, 'Weekly': 2, 'Daily': 3 };
-        todaysTasks.sort((a, b) => frequencyOrder[a.frequency] - frequencyOrder[b.frequency]);
-
-        // --- Render Tasks to the Page ---
-        linkedinTasksList.innerHTML = '';
-        mediaTasksList.innerHTML = '';
-
-        if (todaysTasks.length === 0) {
-            linkedinTasksList.innerHTML = '<p>No tasks due today. Great job!</p>';
-        }
-
+        console.log('--- CHECKPOINT 4: Rendering tasks... ---');
         todaysTasks.forEach(target => {
             const taskHTML = `
                 <div class="task-item ${target.frequency.toLowerCase()}">
