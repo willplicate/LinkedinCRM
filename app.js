@@ -113,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         console.log('--- CHECKPOINT 4: Rendering tasks... ---');
         todaysTasks.forEach(target => {
+            // **FIXED:** The full HTML is now here
             const taskHTML = `
                 <div class="task-item ${target.frequency.toLowerCase()}">
                     <div class="task-header">
