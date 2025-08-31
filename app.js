@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     //  CORE APP LOGIC
     // ============================================================================
     
-    // --- FETCH AND DISPLAY TASKS ---
+   // --- FETCH AND DISPLAY TASKS (IMPROVED DATE LOGIC) ---
     const fetchAndDisplayTasks = async () => {
         const { data: targets, error } = await supabaseClient
             .from('targets')
@@ -45,6 +45,179 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // --- Date Logic Helpers ---
+        // **FIX:** This creates a more reliable "today" timestamp for comparisons
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); 
+
+        const isLastFridayOfMonth = (date) => {
+            const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+            const lastDay = new Date(nextMonth - 1);
+            lastDay.setDate(lastDay.getDate() - (lastDay.getDay() + 2) % 7);
+            return date.toDateString() === lastDay.toDateString();
+        };
+
+        // --- Filter for Today's Tasks ---
+        const todaysTasks = targets.filter(target => {
+            // For a new target, last_completed_at is null, so it should always appear if due.
+            if (!target.last_completed_at) {
+                if (target.frequency === 'Daily') return true;
+                if (target.frequency === 'Weekly' && today.getDay() === 5) return true; // 5 = Friday
+                if (target.frequency === 'Monthly' && isLastFridayOfMonth(today)) return true;
+                return false;
+            }
+
+            const lastCompleted = new Date(target.last_completed_at);
+            lastCompleted.setHours(0, 0, 0, 0);
+
+            if (lastCompleted.getTime() >= today.getTime()) {
+                return false; // Already completed today or in the future
+            }
+
+            // If completed in the past, check if it's due again today
+            switch (target.frequency) {
+                case 'Daily':
+                    return true;
+                case 'Weekly':
+                    return today.getDay() === 5; // 5 = Friday
+                case 'Monthly':
+                    return isLastFridayOfMonth(today);
+                default:
+                    return false;
+            }
+        });
+        
+        // --- Sort Tasks: Monthly > Weekly > Daily ---
+        const frequencyOrder = { 'Monthly': 1, 'Weekly': 2, 'Daily': 3 };
+        todaysTasks.sort((a, b) => frequencyOrder[a.frequency] - frequencyOrder[b.frequency]);
+
+        // --- Render Tasks to the Page ---
+        linkedinTasksList.innerHTML = '';
+        mediaTasksList.innerHTML = '';
+
+        if (todaysTasks.length === 0) {
+            linkedinTasksList.innerHTML = '<p>No tasks due today. Great job!</p>';
+            return; // Exit after showing the message
+        }
+
+        todaysTasks.forEach(target => {
+            const taskHTML = `
+                <div class="task-item ${target.frequency.toLowerCase()}">
+                    <div class="task-header">
+                        <a href="${target.linkedin_url}" target="_blank">${target.name}</a>
+                        ${target.publication ? `<span class="publication">(${target.publication})</span>` : ''}
+                    </div>
+                    <form class="interaction-form" data-target-id="${target.id}">
+                        <div class="actions">
+                            <label><input type="checkbox" name="checked"> Checked</label>
+                            <label><input type="checkbox" name="commented"> Commented</label>
+                            <label><input type="checkbox" name="contacted"> Contacted</label>
+                            ${target.status === 'Awaiting Reply' ? `<label><input type="checkbox" name="replied"> ↩️ Replied</label>` : ''}
+                        </div>
+                        <textarea name="notes" placeholder="Add a note..."></textarea>
+                        <button type="submit">Save Interaction</button>
+                    </form>
+                </div>
+            `;
+            if (target.target_type === 'Media') {
+                mediaTasksList.innerHTML += taskHTML;
+            } else {
+                linkedinTasksList.innerHTML += taskHTML;
+            }
+        });
+
+        // Add event listeners to the new forms
+        document.querySelectorAll('.interaction-form').forEach(form => {
+            form.addEventListener('submit', handleInteractionSubmit);
+        });
+    };
+
+        // --- Date Logic Helpers ---
+        // **FIX:** This creates a more reliable "today" timestamp for comparisons
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); 
+
+        const isLastFridayOfMonth = (date) => {
+            const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+            const lastDay = new Date(nextMonth - 1);
+            lastDay.setDate(lastDay.getDate() - (lastDay.getDay() + 2) % 7);
+            return date.toDateString() === lastDay.toDateString();
+        };
+
+        // --- Filter for Today's Tasks ---
+        const todaysTasks = targets.filter(target => {
+            // For a new target, last_completed_at is null, so it should always appear if due.
+            if (!target.last_completed_at) {
+                if (target.frequency === 'Daily') return true;
+                if (target.frequency === 'Weekly' && today.getDay() === 5) return true; // 5 = Friday
+                if (target.frequency === 'Monthly' && isLastFridayOfMonth(today)) return true;
+                return false;
+            }
+
+            const lastCompleted = new Date(target.last_completed_at);
+            lastCompleted.setHours(0, 0, 0, 0);
+
+            if (lastCompleted.getTime() >= today.getTime()) {
+                return false; // Already completed today or in the future
+            }
+
+            // If completed in the past, check if it's due again today
+            switch (target.frequency) {
+                case 'Daily':
+                    return true;
+                case 'Weekly':
+                    return today.getDay() === 5; // 5 = Friday
+                case 'Monthly':
+                    return isLastFridayOfMonth(today);
+                default:
+                    return false;
+            }
+        });
+        
+        // --- Sort Tasks: Monthly > Weekly > Daily ---
+        const frequencyOrder = { 'Monthly': 1, 'Weekly': 2, 'Daily': 3 };
+        todaysTasks.sort((a, b) => frequencyOrder[a.frequency] - frequencyOrder[b.frequency]);
+
+        // --- Render Tasks to the Page ---
+        linkedinTasksList.innerHTML = '';
+        mediaTasksList.innerHTML = '';
+
+        if (todaysTasks.length === 0) {
+            linkedinTasksList.innerHTML = '<p>No tasks due today. Great job!</p>';
+            return; // Exit after showing the message
+        }
+
+        todaysTasks.forEach(target => {
+            const taskHTML = `
+                <div class="task-item ${target.frequency.toLowerCase()}">
+                    <div class="task-header">
+                        <a href="${target.linkedin_url}" target="_blank">${target.name}</a>
+                        ${target.publication ? `<span class="publication">(${target.publication})</span>` : ''}
+                    </div>
+                    <form class="interaction-form" data-target-id="${target.id}">
+                        <div class="actions">
+                            <label><input type="checkbox" name="checked"> Checked</label>
+                            <label><input type="checkbox" name="commented"> Commented</label>
+                            <label><input type="checkbox" name="contacted"> Contacted</label>
+                            ${target.status === 'Awaiting Reply' ? `<label><input type="checkbox" name="replied"> ↩️ Replied</label>` : ''}
+                        </div>
+                        <textarea name="notes" placeholder="Add a note..."></textarea>
+                        <button type="submit">Save Interaction</button>
+                    </form>
+                </div>
+            `;
+            if (target.target_type === 'Media') {
+                mediaTasksList.innerHTML += taskHTML;
+            } else {
+                linkedinTasksList.innerHTML += taskHTML;
+            }
+        });
+
+        // Add event listeners to the new forms
+        document.querySelectorAll('.interaction-form').forEach(form => {
+            form.addEventListener('submit', handleInteractionSubmit);
+        });
+    };
         // --- Date Logic Helpers ---
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Normalize to start of day
