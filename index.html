@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn CRM</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <div id="login-section" class="container">
+        <h2>Login to your CRM</h2>
+        <form id="login-form">
+            <input type="email" id="login-email" placeholder="Email" required>
+            <input type="password" id="login-password" placeholder="Password" required>
+            <button type="submit">Login</button>
+            <p id="auth-error" class="error-message"></p>
+        </form>
+    </div>
+
+    <div id="app-section" class="container" style="display: none;">
+        <header>
+            <h1>Today's Outreach</h1>
+            <div class="header-actions">
+                <button id="add-target-btn">+ Add Target</button>
+                <button id="logout-btn">Logout</button>
+            </div>
+        </header>
+
+        <main>
+            <div class="list-container">
+                <h3>LinkedIn Targets</h3>
+                <div id="linkedin-tasks" class="task-list">
+                    </div>
+            </div>
+
+            <div class="list-container">
+                <h3>Media Outreach</h3>
+                <div id="media-tasks" class="task-list">
+                    </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="add-target-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <form id="add-target-form">
+                <h3>Add New Target</h3>
+                <input type="text" id="target-name" placeholder="Full Name" required>
+                <input type="url" id="target-url" placeholder="LinkedIn URL" required>
+                <select id="target-frequency" required>
+                    <option value="" disabled selected>Select Frequency</option>
+                    <option value="Daily">Daily</option>
+                    <option value="Weekly">Weekly</option>
+                    <option value="Monthly">Monthly</option>
+                </select>
+                <select id="target-type" required>
+                    <option value="Standard">Standard Target</option>
+                    <option value="Media">Media Contact</option>
+                </select>
+                <input type="text" id="target-publication" placeholder="Publication/Outlet (if media)" style="display: none;">
+                <button type="submit">Save Target</button>
+            </form>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
