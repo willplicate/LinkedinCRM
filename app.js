@@ -3,7 +3,7 @@
 // ============================================================================
 
 const SUPABASE_URL = 'https://tdclhoimzksmqmnsaccw.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkY2xob2ltemtzbXFtbnNhY2N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2NzAxMjUsImV4cCI6MjA3MjI0NjEyNX0.lkxHRLuT4liiDJWt4AnSk24rFY5E3sceyApZ7kVTGL4';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkY2xob2ltemtzbXFtbnNhY2N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2NzAxMjUsImV4cCI6MjA3MjI0NjEyNX0.lkxHRLuT4liiDJWt4AnSk24rFY5E3sceyApZ7kVTGL4';
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -20,19 +20,171 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('login-form');
     const authError = document.getElementById('auth-error');
     const logoutBtn = document.getElementById('logout-btn');
-
     const addTargetBtn = document.getElementById('add-target-btn');
     const modal = document.getElementById('add-target-modal');
     const closeModalBtn = document.querySelector('.close-btn');
     const addTargetForm = document.getElementById('add-target-form');
     const targetTypeSelect = document.getElementById('target-type');
     const targetPublicationInput = document.getElementById('target-publication');
+    const linkedinTasksList = document.getElementById('linkedin-tasks');
+    const mediaTasksList = document.getElementById('media-tasks');
+
+    // ============================================================================
+    //  CORE APP LOGIC
+    // ============================================================================
+    
+    // --- FETCH AND DISPLAY TASKS ---
+    const fetchAndDisplayTasks = async () => {
+        const { data: targets, error } = await supabaseClient
+            .from('targets')
+            .select('*')
+            .in('status', ['Active', 'Awaiting Reply']);
+
+        if (error) {
+            console.error('Error fetching targets:', error);
+            return;
+        }
+
+        // --- Date Logic Helpers ---
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Normalize to start of day
+
+        const isLastFridayOfMonth = (date) => {
+            const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+            const lastDay = new Date(nextMonth - 1);
+            lastDay.setDate(lastDay.getDate() - (lastDay.getDay() + 2) % 7);
+            return date.toDateString() === lastDay.toDateString();
+        };
+
+        // --- Filter for Today's Tasks ---
+        const todaysTasks = targets.filter(target => {
+            const lastCompleted = target.last_completed_at ? new Date(target.last_completed_at) : null;
+            if (lastCompleted) lastCompleted.setHours(0, 0, 0, 0);
+
+            switch (target.frequency) {
+                case 'Daily':
+                    return !lastCompleted || lastCompleted.getTime() < today.getTime();
+                case 'Weekly':
+                    return today.getDay() === 5 && (!lastCompleted || lastCompleted.getTime() < today.getTime()); // 5 = Friday
+                case 'Monthly':
+                    return isLastFridayOfMonth(today) && (!lastCompleted || lastCompleted.getTime() < today.getTime());
+                default:
+                    return false;
+            }
+        });
+        
+        // --- Sort Tasks: Monthly > Weekly > Daily ---
+        const frequencyOrder = { 'Monthly': 1, 'Weekly': 2, 'Daily': 3 };
+        todaysTasks.sort((a, b) => frequencyOrder[a.frequency] - frequencyOrder[b.frequency]);
+
+        // --- Render Tasks to the Page ---
+        linkedinTasksList.innerHTML = '';
+        mediaTasksList.innerHTML = '';
+
+        if (todaysTasks.length === 0) {
+            linkedinTasksList.innerHTML = '<p>No tasks due today. Great job!</p>';
+        }
+
+        todaysTasks.forEach(target => {
+            const taskHTML = `
+                <div class="task-item ${target.frequency.toLowerCase()}">
+                    <div class="task-header">
+                        <a href="${target.linkedin_url}" target="_blank">${target.name}</a>
+                        ${target.publication ? `<span class="publication">(${target.publication})</span>` : ''}
+                    </div>
+                    <form class="interaction-form" data-target-id="${target.id}">
+                        <div class="actions">
+                            <label><input type="checkbox" name="checked"> Checked</label>
+                            <label><input type="checkbox" name="commented"> Commented</label>
+                            <label><input type="checkbox" name="contacted"> Contacted</label>
+                            ${target.status === 'Awaiting Reply' ? `<label><input type="checkbox" name="replied"> ↩️ Replied</label>` : ''}
+                        </div>
+                        <textarea name="notes" placeholder="Add a note..."></textarea>
+                        <button type="submit">Save Interaction</button>
+                    </form>
+                </div>
+            `;
+            if (target.target_type === 'Media') {
+                mediaTasksList.innerHTML += taskHTML;
+            } else {
+                linkedinTasksList.innerHTML += taskHTML;
+            }
+        });
+
+        // Add event listeners to the new forms
+        document.querySelectorAll('.interaction-form').forEach(form => {
+            form.addEventListener('submit', handleInteractionSubmit);
+        });
+    };
+
+    // --- HANDLE INTERACTION SUBMIT ---
+    const handleInteractionSubmit = async (event) => {
+        event.preventDefault();
+        const form = event.target;
+        const targetId = form.dataset.targetId;
+        const notes = form.elements.notes.value;
+        const interactionsToLog = [];
+        let newStatus = 'Active';
+
+        // Check which boxes were ticked
+        if (form.elements.checked.checked) interactionsToLog.push({ interaction_type: 'Checked', notes, target_id: targetId });
+        if (form.elements.commented.checked) interactionsToLog.push({ interaction_type: 'Commented', notes, target_id: targetId });
+        if (form.elements.contacted.checked) {
+            interactionsToLog.push({ interaction_type: 'Contacted', notes, target_id: targetId });
+            newStatus = 'Awaiting Reply'; // Set status if contacted
+        }
+        if (form.elements.replied && form.elements.replied.checked) {
+             interactionsToLog.push({ interaction_type: 'Replied', notes, target_id: targetId });
+             newStatus = 'Active'; // Status goes back to Active after reply
+        }
+
+        // 1. Log the interactions
+        if (interactionsToLog.length > 0) {
+            const { error: insertError } = await supabaseClient.from('interactions').insert(interactionsToLog);
+            if (insertError) console.error('Error logging interaction:', insertError);
+        }
+
+        // 2. Update the target's status and last_completed_at
+        const { error: updateError } = await supabaseClient
+            .from('targets')
+            .update({ last_completed_at: new Date().toISOString(), status: newStatus })
+            .eq('id', targetId);
+        
+        if (updateError) console.error('Error updating target:', updateError);
+
+        // 3. Refresh the task list
+        fetchAndDisplayTasks();
+    };
+
+
+    // --- ADD NEW TARGET ---
+    addTargetForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const newTarget = {
+            name: document.getElementById('target-name').value,
+            linkedin_url: document.getElementById('target-url').value,
+            frequency: document.getElementById('target-frequency').value,
+            target_type: document.getElementById('target-type').value,
+            publication: document.getElementById('target-publication').value || null,
+        };
+
+        const { data, error } = await supabaseClient.from('targets').insert([newTarget]);
+
+        if (error) {
+            console.error('Error adding new target:', error);
+            alert('Could not add target.');
+        } else {
+            console.log('Successfully added target:', data);
+            addTargetForm.reset();
+            modal.style.display = 'none';
+            fetchAndDisplayTasks(); // Refresh the list to show the new target if it's due
+        }
+    });
 
     // ============================================================================
     //  AUTHENTICATION
     // ============================================================================
-
-    // --- Login Handler ---
+    
     loginForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         authError.textContent = '';
@@ -46,32 +198,24 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             loginSection.style.display = 'none';
             appSection.style.display = 'block';
-            console.log('Logged in successfully!');
-            // fetchAndDisplayTasks(); 
+            fetchAndDisplayTasks(); // Fetch tasks on login
         }
     });
 
-    // --- Logout Handler ---
     logoutBtn.addEventListener('click', async () => {
-        const { error } = await supabaseClient.auth.signOut();
-        if (error) {
-            console.error('Error logging out:', error);
-        } else {
-            loginSection.style.display = 'block';
-            appSection.style.display = 'none';
-            document.getElementById('linkedin-tasks').innerHTML = '';
-            document.getElementById('media-tasks').innerHTML = '';
-        }
+        await supabaseClient.auth.signOut();
+        loginSection.style.display = 'block';
+        appSection.style.display = 'none';
+        linkedinTasksList.innerHTML = '';
+        mediaTasksList.innerHTML = '';
     });
 
-    // --- Session Check ---
     async function checkSession() {
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session) {
             loginSection.style.display = 'none';
             appSection.style.display = 'block';
-            console.log('Active session found!');
-            // fetchAndDisplayTasks();
+            fetchAndDisplayTasks(); // Fetch tasks if session exists
         } else {
             loginSection.style.display = 'block';
             appSection.style.display = 'none';
@@ -81,31 +225,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================================================
     //  MODAL & UI CONTROLS
     // ============================================================================
-
-    // --- Modal Controls ---
-    addTargetBtn.addEventListener('click', () => {
-        modal.style.display = 'flex';
-    });
-
-    closeModalBtn.addEventListener('click', () => {
-        modal.style.display = 'none';
-    });
-
-    window.addEventListener('click', (event) => {
-        if (event.target === modal) {
-            modal.style.display = 'none';
-        }
-    });
-
-    // --- Dynamic Form Field ---
+    
+    addTargetBtn.addEventListener('click', () => { modal.style.display = 'flex'; });
+    closeModalBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+    window.addEventListener('click', (event) => { if (event.target === modal) modal.style.display = 'none'; });
     targetTypeSelect.addEventListener('change', () => {
-        if (targetTypeSelect.value === 'Media') {
-            targetPublicationInput.style.display = 'block';
-        } else {
-            targetPublicationInput.style.display = 'none';
-        }
+        targetPublicationInput.style.display = targetTypeSelect.value === 'Media' ? 'block' : 'none';
     });
-
+    
     // ============================================================================
     //  INITIALIZATION
     // ============================================================================
