@@ -27,7 +27,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const linkedinTasksList = document.getElementById('linkedin-tasks');
     const mediaTasksList = document.getElementById('media-tasks');
     const modalTitle = document.querySelector('#add-target-modal h3');
-    // --- NEW: References for the new views and buttons ---
     const tasksView = document.getElementById('tasks-view');
     const allContactsView = document.getElementById('all-contacts-view');
     const viewTasksBtn = document.getElementById('view-tasks-btn');
@@ -38,9 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     //  CORE APP LOGIC
     // ============================================================================
     
-    // --- FETCH AND DISPLAY TASKS (No changes here) ---
     const fetchAndDisplayTasks = async () => {
-        // ... (This entire function remains the same as before)
         const { data: targets, error } = await supabaseClient
             .from('targets')
             .select('*')
@@ -127,12 +124,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    // --- NEW: Function to fetch ALL contacts and display them in a table ---
     const fetchAllContactsAndDisplayTable = async () => {
         const { data: targets, error } = await supabaseClient
             .from('targets')
             .select('*')
-            .order('name', { ascending: true }); // Order alphabetically by name
+            .order('name', { ascending: true });
         
         if (error) {
             console.error('Error fetching all targets:', error);
@@ -145,7 +141,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Build the HTML table
         let tableHTML = `
             <table>
                 <thead>
@@ -180,9 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
         allContactsTableContainer.innerHTML = tableHTML;
     };
 
-    // --- HANDLE INTERACTION SUBMIT (No changes here) ---
     const handleInteractionSubmit = async (event) => {
-        // ... (This entire function remains the same as before)
         event.preventDefault();
         const form = event.target;
         const targetId = form.dataset.targetId;
@@ -215,9 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchAndDisplayTasks();
     };
 
-    // --- ADD/EDIT TARGET FORM (No changes here) ---
     addTargetForm.addEventListener('submit', async (event) => {
-        // ... (This entire function remains the same as before)
         event.preventDefault();
         const targetId = document.getElementById('edit-target-id').value;
         
@@ -248,7 +239,6 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Could not save target.');
         } else {
             closeModal();
-            // --- UPDATED: Check which view is active and refresh it ---
             if (allContactsView.style.display !== 'none') {
                 fetchAllContactsAndDisplayTable();
             } else {
@@ -257,41 +247,114 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- EDIT/DELETE LOGIC (No changes here) ---
-    function handleTaskActions(event) { /* ... */ }
+    function handleTaskActions(event) {
+        const target = event.target;
+        if (target.matches('.edit-btn')) {
+            handleEditClick(target.dataset.targetId);
+        } else if (target.matches('.delete-btn')) {
+            handleDeleteClick(target.dataset.targetId);
+        }
+    }
     linkedinTasksList.addEventListener('click', handleTaskActions);
     mediaTasksList.addEventListener('click', handleTaskActions);
-    const handleDeleteClick = async (targetId) => { /* ... */ };
-    const handleEditClick = async (targetId) => { /* ... */ };
-    const closeModal = () => { /* ... */ };
 
-    // --- NEW: Logic for the view toggle buttons ---
-    viewTasksBtn.addEventListener('click', () => {
-        tasksView.style.display = 'block';
-        allContactsView.style.display = 'none';
-        viewTasksBtn.classList.add('active');
-        viewAllBtn.classList.remove('active');
-        fetchAndDisplayTasks(); // Refresh tasks view
+    const handleDeleteClick = async (targetId) => {
+        if (confirm('Are you sure you want to delete this target? This action cannot be undone.')) {
+            const { error } = await supabaseClient
+                .from('targets')
+                .delete()
+                .eq('id', targetId);
+            
+            if (error) {
+                console.error('Error deleting target:', error);
+                alert('Could not delete the target.');
+            } else {
+                fetchAndDisplayTasks();
+            }
+        }
+    };
+
+    const handleEditClick = async (targetId) => {
+        const { data: target, error } = await supabaseClient
+            .from('targets')
+            .select('*')
+            .eq('id', targetId)
+            .single();
+
+        if (error) {
+            console.error('Error fetching target for edit:', error);
+return;
+        }
+
+        document.getElementById('target-name').value = target.name;
+        document.getElementById('target-url').value = target.linkedin_url;
+        document.getElementById('target-frequency').value = target.frequency;
+        document.getElementById('target-type').value = target.target_type;
+        document.getElementById('target-publication').value = target.publication || '';
+        document.getElementById('edit-target-id').value = target.id;
+
+        targetPublicationInput.style.display = target.target_type === 'Media' ? 'block' : 'none';
+        
+        modalTitle.textContent = 'Edit Target';
+        modal.style.display = 'flex';
+    };
+
+    const closeModal = () => {
+        addTargetForm.reset();
+        document.getElementById('edit-target-id').value = '';
+        modal.style.display = 'none';
+        modalTitle.textContent = 'Add New Target';
+        targetPublicationInput.style.display = 'none';
+    };
+
+    loginForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        authError.textContent = '';
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
+        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) {
+            authError.textContent = 'Error: ' + error.message;
+        } else {
+            loginSection.style.display = 'none';
+            appSection.style.display = 'block';
+            fetchAndDisplayTasks();
+        }
     });
 
-    viewAllBtn.addEventListener('click', () => {
-        tasksView.style.display = 'none';
-        allContactsView.style.display = 'block';
-        viewTasksBtn.classList.remove('active');
-        viewAllBtn.classList.add('active');
-        fetchAllContactsAndDisplayTable(); // Fetch and show the table
+    logoutBtn.addEventListener('click', async () => {
+        await supabaseClient.auth.signOut();
+        loginSection.style.display = 'block';
+        appSection.style.display = 'none';
+        linkedinTasksList.innerHTML = '';
+        mediaTasksList.innerHTML = '';
     });
-    
-    // --- AUTHENTICATION, MODAL CONTROLS, INITIALIZATION (No changes here) ---
-    // All the remaining code is exactly the same as before
-    loginForm.addEventListener('submit', async (event) => { /* ... */ });
-    logoutBtn.addEventListener('click', async () => { /* ... */ });
-    async function checkSession() { /* ... */ }
-    addTargetBtn.addEventListener('click', () => { /* ... */ });
+
+    async function checkSession() {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session) {
+            loginSection.style.display = 'none';
+            appSection.style.display = 'block';
+            fetchAndDisplayTasks();
+        } else {
+            loginSection.style.display = 'block';
+            appSection.style.display = 'none';
+        }
+    }
+
+    addTargetBtn.addEventListener('click', () => { 
+        closeModal();
+        modalTitle.textContent = 'Add New Target';
+        modal.style.display = 'flex'; 
+    });
     closeModalBtn.addEventListener('click', closeModal);
     window.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
-    targetTypeSelect.addEventListener('change', () => { /* ... */ });
+    targetTypeSelect.addEventListener('change', () => {
+        targetPublicationInput.style.display = targetTypeSelect.value === 'Media' ? 'block' : 'none';
+    });
+    
     checkSession();
+
     const hiddenInput = document.createElement('input');
     hiddenInput.type = 'hidden';
     hiddenInput.id = 'edit-target-id';
