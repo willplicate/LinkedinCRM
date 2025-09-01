@@ -29,15 +29,27 @@
         </header>
 
         <main>
-            <div class="list-container">
-                <h3>LinkedIn Targets</h3>
-                <div id="linkedin-tasks" class="task-list">
-                    </div>
+            <div class="view-toggle">
+                <button id="view-tasks-btn" class="active">Today's Tasks</button>
+                <button id="view-all-btn">All Contacts</button>
             </div>
 
-            <div class="list-container">
-                <h3>Media Outreach</h3>
-                <div id="media-tasks" class="task-list">
+            <div id="tasks-view">
+                <div class="list-container">
+                    <h3>LinkedIn Targets</h3>
+                    <div id="linkedin-tasks" class="task-list">
+                        </div>
+                </div>
+                <div class="list-container">
+                    <h3>Media Outreach</h3>
+                    <div id="media-tasks" class="task-list">
+                        </div>
+                </div>
+            </div>
+
+            <div id="all-contacts-view" style="display: none;">
+                <h3>All Contacts</h3>
+                <div id="all-contacts-table-container">
                     </div>
             </div>
         </main>
